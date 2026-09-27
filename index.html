@@ -400,8 +400,34 @@ body.touch #phoneHint.on{display:block}
 
   /* ——— Движок ——— */
   var ready = false, args = null;
+  /* Плавность. Движок крутил свой цикл по таймеру «как можно быстрее»
+     (SDL: вертикальная синхронизация выключена), а следующего игрового тика
+     (их 35 в секунду) ждал короткими «поспать 1 мс». Кадры рисовались когда
+     попало, не в такт экрану — поворот шёл рывками (замер: 0 из 212 кадров
+     в такт экрана). Теперь цикл идёт в такт экрана и запускается, только
+     когда пора следующему тику, — без ожиданий внутри кадра. */
+  function syncLoop(){
+    var B = window.Browser, set = window._emscripten_set_main_loop_timing;
+    if (!B || !B.mainLoop || typeof set !== 'function') return;
+    var TIC = 1000 / 35, next = 0, slept = false, orig = B.safeSetTimeout;
+    // Кадр всё же пришлось «доспать» до тика — значит, стартуем чуть рано:
+    // сдвигаем расписание, пока оно не совпадёт с тиками движка.
+    B.safeSetTimeout = function(f, ms){ if (ms <= 4) slept = true; return orig.call(B, f, ms); };
+    Module.preMainLoop = function(){
+      var now = performance.now();
+      if (slept) { next += 2; slept = false; }
+      if (now + 2 < next) return false;              // ещё рано — пропускаем этот кадр экрана
+      next = Math.max(next + TIC, now - TIC);        // держим ровно 35 в секунду, без догонялок
+      return true;
+    };
+    setInterval(function(){
+      if (B.mainLoop.func && B.mainLoop.timingMode !== 1) set(1, 1);
+    }, 300);
+  }
+
   function launch(){
     if (!ready || !args) return;
+    syncLoop();
     $('loader').style.display = 'none';
     // Движок пишет в заголовок «DOOM Shareware - Websockets Doom» — у нас BOOM.
     try { Object.defineProperty(document, 'title', {configurable: true, get: function(){ return 'BOOM'; }, set: function(){}}); } catch (e) {}
