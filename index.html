@@ -225,6 +225,12 @@ body.touch #phoneHint.on{display:block}
      пытаться захватить по-настоящему. */
   var canvasEl = document.getElementById('canvas'), LOOK_SPEED = 5;
   function fakeLock(){
+    /* На iPhone захвата мыши нет вовсе — и тогда движок даже не подписывается
+       на событие о захвате (проверяет document.body.requestPointerLock), а
+       значит, никогда не узнает, что «захвачено». Подкладываем пустышки. */
+    var noop = function(){};
+    try { if (!HTMLElement.prototype.requestPointerLock) HTMLElement.prototype.requestPointerLock = noop; } catch (e) {}
+    try { if (!document.exitPointerLock) document.exitPointerLock = noop; } catch (e) {}
     try {
       Object.defineProperty(document, 'pointerLockElement', {configurable: true, get: function(){ return canvasEl; }});
       canvasEl.requestPointerLock = function(){};
