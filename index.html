@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="description" content="Тот самый DOOM 1993: 9 уровней в одиночку или арена онлайн до 4 игроков — стреляйтесь с друзьями">
+<meta name="theme-color" content="#000000">
+<!-- Для галереи Pleasure Union: одиночная игра + арена онлайн на 2–4. -->
+<meta name="pu:online" content="1">
+<meta name="pu:players" content="1-4">
+<title>DOOM</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{--safe-l:env(safe-area-inset-left,0px);--safe-r:env(safe-area-inset-right,0px);--safe-b:env(safe-area-inset-bottom,0px);--safe-t:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:#000;color:#eee;overflow:hidden;touch-action:none;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;font:600 14px/1.2 system-ui,-apple-system,Roboto,sans-serif}
+#screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+/* 4:3, как на мониторе 1993 года: влезает целиком и не растягивается. */
+canvas#canvas{display:block;background:#000;width:min(100vw,calc(100dvh * 4 / 3));height:auto;aspect-ratio:4/3;
+  image-rendering:pixelated;outline:none}
+/* В портрете картинка — сверху, управление — под ней. */
+@media (orientation:portrait){#screen{align-items:flex-start;padding-top:calc(var(--tg-content-top,0px) + var(--safe-t) + 8px)}}
+
+#loader{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#000;z-index:5}
+#loader b{font:900 44px/1 Impact,"Arial Black",sans-serif;letter-spacing:2px;color:#c21a1a;text-shadow:0 0 18px #f00a}
+#loader span{color:#aaa;font-size:13px}
+#loader i{width:180px;height:6px;border-radius:3px;background:#222;overflow:hidden}
+#loader i::after{content:"";display:block;height:100%;width:40%;background:#c21a1a;animation:ld 1s linear infinite}
+@keyframes ld{from{transform:translateX(-100%)}to{transform:translateX(250%)}}
+#err{position:fixed;left:12px;right:12px;bottom:12px;padding:10px 12px;border-radius:10px;background:#300;color:#fbb;font-size:13px;z-index:9;display:none}
+
+/* ——— Стартовое меню ——— */
+#menu{position:fixed;inset:0;z-index:6;background:radial-gradient(circle at 50% 30%,#3a0606,#000 70%);display:none;
+  align-items:center;justify-content:center;padding:16px;overflow:auto;touch-action:pan-y}
+#menu.on{display:flex}
+#menu .box{width:min(440px,100%);display:flex;flex-direction:column;gap:12px;text-align:center}
+#menu h1{margin:0 0 4px;font:900 52px/1 Impact,"Arial Black",sans-serif;letter-spacing:3px;color:#d11;text-shadow:0 0 22px #f00a}
+#menu .sub{color:#b99;font-size:13px;margin:-4px 0 6px}
+#menu .lbl{color:#a88;font-size:12px;text-transform:uppercase;letter-spacing:1px;margin-top:6px}
+.seg{display:flex;gap:8px}
+.seg button{flex:1}
+.mbtn{border:2px solid #7a1c1c;background:#1b0707;color:#f3dcdc;border-radius:12px;padding:13px 10px;font:800 15px/1.2 inherit;cursor:pointer}
+.mbtn.on,.mbtn.main{background:#b01414;border-color:#ff5050;color:#fff}
+.mbtn.ghost{background:transparent;border-color:#442}
+.mbtn:disabled{opacity:.45}
+.row{display:flex;gap:8px;align-items:stretch}
+.row > *{flex:1}
+#menu input,#menu select{border:2px solid #7a1c1c;background:#000;color:#fff;border-radius:12px;padding:12px;font:800 18px/1 inherit;text-align:center;min-width:0}
+#menu input{letter-spacing:6px}
+#menu .hint{color:#977;font-size:12px;line-height:1.4}
+.page{display:none;flex-direction:column;gap:12px}
+.page.on{display:flex}
+
+/* ——— Полоса арены поверх игры ——— */
+#arena{position:fixed;z-index:4;left:50%;transform:translateX(-50%);top:calc(var(--tg-content-top,0px) + var(--safe-t) + 8px);
+  display:none;gap:8px;align-items:center;background:#000c;border:1px solid #7a1c1c;border-radius:12px;padding:6px 8px 6px 12px;white-space:nowrap}
+#arena.on{display:flex}
+#arena b{letter-spacing:2px;color:#ff6b6b}
+#arena button{border:0;border-radius:9px;padding:8px 10px;font:800 13px/1 inherit;background:#b01414;color:#fff}
+#arena button.ghost{background:#333}
+
+/* ——— Сенсорное управление: только когда выбран телефон ——— */
+#pad{display:none}
+body.touch #pad{display:block}
+#pcHint{position:fixed;z-index:3;left:50%;bottom:10px;transform:translateX(-50%);color:#fff9;font-size:12px;display:none;
+  background:#0009;padding:6px 10px;border-radius:8px}
+body.pc #pcHint{display:block}
+.ctl{position:fixed;z-index:3;border-radius:50%;border:2px solid #fff3;background:#ffffff14;color:#fffc;
+  display:flex;align-items:center;justify-content:center;font-weight:800;letter-spacing:.5px;touch-action:none}
+.ctl.on{background:#ffffff40;border-color:#fff8}
+#stick{left:calc(18px + var(--safe-l));bottom:calc(18px + var(--safe-b));width:150px;height:150px}
+#knob{width:62px;height:62px;border-radius:50%;background:#ffffff45;pointer-events:none;transform:translate(0,0)}
+#fire{right:calc(22px + var(--safe-r));bottom:calc(34px + var(--safe-b));width:96px;height:96px;background:#c21a1a55;border-color:#ff5a5a88;font-size:15px}
+#fire.on{background:#e02020aa}
+/* Горизонтально: картинка по центру, кнопки — в чёрных полях по бокам. */
+#use{right:calc(36px + var(--safe-r));bottom:calc(148px + var(--safe-b));width:66px;height:66px;font-size:12px}
+#weap{right:calc(40px + var(--safe-r));top:calc(var(--tg-content-top,0px) + var(--safe-t) + 14px);width:60px;height:60px;font-size:20px}
+#top{position:fixed;z-index:3;top:calc(var(--tg-content-top,0px) + var(--safe-t) + 10px);left:calc(10px + var(--safe-l));
+  display:flex;flex-direction:column;gap:8px}
+#top .ctl{position:static;width:auto;height:36px;padding:0 12px;border-radius:10px;font-size:13px;white-space:nowrap}
+/* Вертикально: картинка сверху, всё управление — под ней. */
+@media (orientation:portrait){
+  #top{flex-direction:row;left:50%;transform:translateX(-50%);
+    top:calc(var(--tg-content-top,0px) + var(--safe-t) + 8px + 75vw + 14px)}
+  #weap{top:auto;bottom:calc(142px + var(--safe-b))}
+  #use{right:calc(128px + var(--safe-r));bottom:calc(22px + var(--safe-b))}
+}
+</style>
+</head>
+<body>
+<div id="screen"><canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas></div>
+<div id="loader"><b>DOOM</b><i></i><span id="ldText">Загрузка… (6 МБ)</span></div>
+<div id="err"></div>
+
+<div id="menu"><div class="box">
+  <h1>DOOM</h1>
+  <div class="sub">1993 · первый эпизод</div>
+  <div class="lbl">Играю с</div>
+  <div class="seg">
+    <button class="mbtn" data-dev="phone">📱 Телефона</button>
+    <button class="mbtn" data-dev="pc">🖥 Компьютера</button>
+  </div>
+
+  <div class="page on" id="pgMain">
+    <div class="lbl">Режим</div>
+    <button class="mbtn main" id="goSolo">▶ Одиночная</button>
+    <button class="mbtn" id="goArena">⚔ Арена онлайн</button>
+    <div class="hint" id="noArena" hidden>Арена работает, когда DOOM открыт из Pleasure Union.</div>
+  </div>
+
+  <div class="page" id="pgArena">
+    <div class="lbl">Создать арену</div>
+    <div class="row">
+      <select id="aPlayers" aria-label="Игроков"><option value="2">2 игрока</option><option value="3">3 игрока</option><option value="4">4 игрока</option></select>
+      <select id="aMap" aria-label="Карта"></select>
+    </div>
+    <button class="mbtn main" id="goHost">Создать</button>
+    <div class="lbl">или войти по коду</div>
+    <div class="row">
+      <input id="aCode" inputmode="numeric" maxlength="4" placeholder="0000" autocomplete="off">
+      <button class="mbtn" id="goJoin">Войти</button>
+    </div>
+    <div class="hint">Арена без монстров, оружие и аптечки появляются снова. Кто создал — тот хозяин: пока он в игре, арена живёт.</div>
+    <button class="mbtn ghost" id="back">← Назад</button>
+  </div>
+
+  <div class="page" id="pgInvited">
+    <div class="lbl">Тебя зовут на арену</div>
+    <div style="font:900 40px/1 inherit;letter-spacing:8px;color:#ff6b6b" id="invCode"></div>
+    <button class="mbtn main" id="goInvited">⚔ Войти</button>
+    <button class="mbtn ghost" id="skipInvite">Не сейчас</button>
+  </div>
+</div></div>
+
+<div id="arena"><span>Арена <b id="arenaCode"></b></span><span id="arenaState"></span>
+  <button id="arenaInvite">Позвать</button><button class="ghost" id="arenaStart" hidden>Начать</button></div>
+<div id="pcHint">Клик по игре — управление мышью · WASD — ходить · E — открыть · Esc — меню</div>
+
+<div id="pad">
+  <div class="ctl" id="stick"><div id="knob"></div></div>
+  <div class="ctl" id="fire">ОГОНЬ</div>
+  <div class="ctl" id="use">ОТКР.</div>
+  <div class="ctl" id="weap" title="Следующее оружие">⟳</div>
+  <div id="top">
+    <div class="ctl" data-key="Escape">☰ Меню</div>
+    <div class="ctl" data-key="Tab">Карта</div>
+    <div class="ctl" data-key="Enter" data-also="KeyY">OK</div>
+  </div>
+</div>
+
+<script>
+/* DOOM (1993) в браузере. Движок — готовая сборка cloudflare/doom-wasm
+   (Chocolate Doom, GPL-2), уровни — shareware DOOM1.WAD от id Software.
+   Этот файл — только оболочка: экран, сенсорное управление, звук на
+   телефоне, сохранения и Telegram. */
+(function(){
+  'use strict';
+  var tg = window.Telegram && window.Telegram.WebApp;
+  var PU_GALLERY = !!(window.PU && window.PU.inGallery);
+
+  function fail(t){ var e = document.getElementById('err'); e.textContent = t; e.style.display = 'block'; }
+
+  /* ——— Клавиши. Движок слушает обычные события клавиатуры; сенсорные
+     кнопки шлют их же — поэтому и клавиатура на компьютере работает сама. */
+  var KEYS = {
+    ArrowUp:[38,'ArrowUp'], ArrowDown:[40,'ArrowDown'], ArrowLeft:[37,'ArrowLeft'], ArrowRight:[39,'ArrowRight'],
+    ControlLeft:[17,'Control'], Space:[32,' '], Escape:[27,'Escape'], Tab:[9,'Tab'], Enter:[13,'Enter'],
+    KeyY:[89,'y'], BracketRight:[221,']']
+  };
+  var down = {};
+  function key(code, isDown){
+    if (!!down[code] === isDown) return;
+    down[code] = isDown;
+    var k = KEYS[code];
+    var ev = new KeyboardEvent(isDown ? 'keydown' : 'keyup', {code: code, key: k[1], bubbles: true, cancelable: true});
+    Object.defineProperty(ev, 'keyCode', {get: function(){ return k[0]; }});
+    Object.defineProperty(ev, 'which', {get: function(){ return k[0]; }});
+    window.dispatchEvent(ev);
+  }
+  function tap(code){ key(code, true); setTimeout(function(){ key(code, false); }, 90); }
+
+  /* ——— Сенсорное управление ——— */
+  function hold(el, code){
+    el.addEventListener('pointerdown', function(e){ e.preventDefault(); el.setPointerCapture(e.pointerId); el.classList.add('on'); key(code, true); haptic(); });
+    ['pointerup','pointercancel','lostpointercapture'].forEach(function(t){
+      el.addEventListener(t, function(){ el.classList.remove('on'); key(code, false); });
+    });
+  }
+  function haptic(){ try { tg && tg.HapticFeedback && tg.HapticFeedback.impactOccurred('light'); } catch (e) {} }
+
+  var stick = document.getElementById('stick'), knob = document.getElementById('knob'), sid = null;
+  function stickMove(e){
+    var r = stick.getBoundingClientRect(), R = r.width / 2;
+    var dx = (e.clientX - r.left - R) / R, dy = (e.clientY - r.top - R) / R;
+    var m = Math.hypot(dx, dy); if (m > 1) { dx /= m; dy /= m; }
+    knob.style.transform = 'translate(' + dx * R * 0.6 + 'px,' + dy * R * 0.6 + 'px)';
+    // Мёртвая зона — чтобы палец, лежащий на стике, не крутил камеру сам.
+    key('ArrowUp', dy < -0.35); key('ArrowDown', dy > 0.35);
+    key('ArrowLeft', dx < -0.35); key('ArrowRight', dx > 0.35);
+  }
+  function stickEnd(){
+    sid = null; knob.style.transform = ''; stick.classList.remove('on');
+    ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].forEach(function(c){ key(c, false); });
+  }
+  stick.addEventListener('pointerdown', function(e){ e.preventDefault(); sid = e.pointerId; stick.setPointerCapture(sid); stick.classList.add('on'); stickMove(e); });
+  stick.addEventListener('pointermove', function(e){ if (e.pointerId === sid) stickMove(e); });
+  ['pointerup','pointercancel','lostpointercapture'].forEach(function(t){ stick.addEventListener(t, stickEnd); });
+
+  hold(document.getElementById('fire'), 'ControlLeft');
+  hold(document.getElementById('use'), 'Space');
+  document.getElementById('weap').addEventListener('pointerdown', function(e){ e.preventDefault(); tap('BracketRight'); haptic(); });
+  Array.prototype.forEach.call(document.querySelectorAll('#top [data-key]'), function(b){
+    b.addEventListener('pointerdown', function(e){
+      e.preventDefault(); tap(b.dataset.key); if (b.dataset.also) tap(b.dataset.also); haptic();
+    });
+  });
+
+  document.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+
+  /* ——— Звук. Браузер телефона молчит, пока человек ничего не нажал:
+     запоминаем все звуковые контексты движка и будим их первым касанием. */
+  var ctxs = [], AC = window.AudioContext || window.webkitAudioContext;
+  if (AC) {
+    var Wrapped = function(o){ var c = new AC(o); ctxs.push(c); return c; };
+    Wrapped.prototype = AC.prototype;
+    window.AudioContext = Wrapped; window.webkitAudioContext = Wrapped;
+  }
+  function wake(){ ctxs.forEach(function(c){ if (c.state !== 'running') c.resume().catch(function(){}); }); }
+  ['pointerdown','keydown','touchend'].forEach(function(t){ window.addEventListener(t, wake, true); });
+
+  /* ——— Сохранения. Движок пишет их в память страницы; без этого они
+     пропадали бы при закрытии. Копируем в хранилище телефона и возвращаем
+     при следующем запуске. */
+  var SAVE_DIR = '/libsdl/doom-ws-wasm/savegames/doom.wad', SAVE_KEY = 'doom.saves.v1';
+  function loadSaves(FS){
+    try {
+      FS.mkdirTree(SAVE_DIR);
+      var saved = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
+      Object.keys(saved).forEach(function(name){
+        var bin = atob(saved[name]), buf = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+        FS.writeFile(SAVE_DIR + '/' + name, buf);
+      });
+    } catch (e) {}
+  }
+  var lastSaves = '';
+  function keepSaves(FS){
+    try {
+      var out = {};
+      FS.readdir(SAVE_DIR).forEach(function(name){
+        if (!/^doomsav\d\.dsg$/.test(name)) return;
+        var data = FS.readFile(SAVE_DIR + '/' + name), s = '';
+        for (var i = 0; i < data.length; i += 0x8000) s += String.fromCharCode.apply(null, data.subarray(i, i + 0x8000));
+        out[name] = btoa(s);
+      });
+      var json = JSON.stringify(out);
+      if (json !== lastSaves) { localStorage.setItem(SAVE_KEY, json); lastSaves = json; }
+    } catch (e) {}
+  }
+
+  /* ——— Telegram ——— */
+  if (tg) {
+    try { tg.ready(); tg.expand(); } catch (e) {}
+    try { tg.disableVerticalSwipes && tg.disableVerticalSwipes(); } catch (e) {}   // стик не должен закрывать игру
+    try { tg.setHeaderColor && tg.setHeaderColor('#000000'); tg.setBackgroundColor && tg.setBackgroundColor('#000000'); } catch (e) {}
+    try { if (tg.isVersionAtLeast && tg.isVersionAtLeast('8.0') && /android|ios/.test(tg.platform)) tg.requestFullscreen(); } catch (e) {}
+    try {
+      var top = function(){ var v = tg.contentSafeAreaInset && tg.contentSafeAreaInset.top || 0;
+        document.documentElement.style.setProperty('--tg-content-top', v + 'px'); };
+      top(); tg.onEvent && tg.onEvent('contentSafeAreaChanged', top); tg.onEvent && tg.onEvent('fullscreenChanged', top);
+    } catch (e) {}
+    if (tg.BackButton) {
+      tg.BackButton.show();
+      tg.BackButton.onClick(function(){
+        // Из галереи — назад в галерею (спросив: случайное «назад» посреди
+        // уровня стоило бы прогресса). Иначе «назад» — это меню игры.
+        if (!PU_GALLERY) { tap('Escape'); return; }
+        var go = function(ok){ if (ok) window.PU.exit(); };
+        if (tg.showConfirm) tg.showConfirm('Выйти из DOOM в галерею?', go); else go(confirm('Выйти из DOOM в галерею?'));
+      });
+    }
+  }
+
+  /* ——— Стартовое меню: с чего играешь и во что ———
+     Управление выбирается ДО запуска: движок читает раскладку клавиш один
+     раз при старте. Телефон — сенсорные кнопки; компьютер — WASD и мышь. */
+  var $ = function(id){ return document.getElementById(id); };
+  var store = function(k, v){ try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) {} };
+  var DEV = store('doom.device') || ((window.matchMedia && matchMedia('(pointer: coarse)').matches) ? 'phone' : 'pc');
+  function showDev(){
+    Array.prototype.forEach.call(document.querySelectorAll('[data-dev]'), function(b){ b.classList.toggle('on', b.dataset.dev === DEV); });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('[data-dev]'), function(b){
+    b.onclick = function(){ DEV = b.dataset.dev; store('doom.device', DEV); showDev(); };
+  });
+  showDev();
+  function page(id){ Array.prototype.forEach.call(document.querySelectorAll('.page'), function(x){ x.classList.toggle('on', x.id === id); }); }
+
+  var MAPS = ['Hangar','Nuclear Plant','Toxin Refinery','Command Control','Phobos Lab',
+              'Central Processing','Computer Station','Phobos Anomaly','Military Base'];
+  $('aMap').innerHTML = MAPS.map(function(n, i){ return '<option value="' + (i + 1) + '">E1M' + (i + 1) + ' · ' + n + '</option>'; }).join('');
+
+  // Арена живёт на сервере галереи (/doom/ws/…) — без галереи ей не с кем говорить.
+  var CAN_ARENA = PU_GALLERY && /^\/g\//.test(location.pathname);
+  if (!CAN_ARENA) { $('goArena').disabled = true; $('noArena').hidden = false; }
+  function wsUrl(code){ return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/doom/ws/' + code; }
+  function newCode(){ return String(1000 + Math.floor(Math.random() * 9000)); }
+
+  $('goSolo').onclick = function(){ start({kind: 'solo'}); };
+  $('goArena').onclick = function(){ page('pgArena'); };
+  $('back').onclick = function(){ page('pgMain'); };
+  $('goHost').onclick = function(){ start({kind: 'host', code: newCode(), players: +$('aPlayers').value, map: +$('aMap').value}); };
+  $('goJoin').onclick = function(){
+    var c = $('aCode').value.replace(/\D/g, '');
+    if (c.length !== 4) { $('aCode').focus(); return; }
+    start({kind: 'join', code: c});
+  };
+  var INVITED = CAN_ARENA && /^\d{4}$/.test(window.PU.room || '') ? window.PU.room : '';
+  if (INVITED) { $('invCode').textContent = INVITED; page('pgInvited'); }
+  $('goInvited').onclick = function(){ start({kind: 'join', code: INVITED}); };
+  $('skipInvite').onclick = function(){ page('pgMain'); };
+  $('menu').classList.add('on');
+
+  /* ——— Полоса арены ——— */
+  var ARENA = null;
+  function arenaState(t){ $('arenaState').textContent = t; }
+  $('arenaInvite').onclick = function(){
+    var link = window.PU && window.PU.roomLink ? window.PU.roomLink(ARENA.code) : '';
+    var text = '⚔ DOOM-арена, код ' + ARENA.code + '. Залетай — постреляемся!';
+    if (link && tg && tg.openTelegramLink) {
+      tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(link) + '&text=' + encodeURIComponent(text));
+    } else if (navigator.clipboard) {
+      navigator.clipboard.writeText(ARENA.code).then(function(){ arenaState('код скопирован'); }, function(){});
+    }
+  };
+  $('arenaStart').onclick = function(){ tap('Space'); };  // хозяин: начать, не дожидаясь всех (в окне ожидания — пробел)
+
+  /* Движок пишет о сети строками «doom: N, …» (см. cloudflare/doom-wasm). */
+  function engineSays(t){
+    var m = /^doom: (\d+),/.exec(t || '');
+    if (!m) { if (/^I_Error|Error:/.test(t)) fail(t); return; }
+    var n = +m[1];
+    if (n === 1 || n === 7) fail('Не удалось подключиться к арене. Проверь код — и что хозяин арены ещё в игре.');
+    else if (n === 9) fail('Связь с ареной потеряна.');
+    else if (n === 10 && ARENA) { arenaState('бой идёт'); $('arenaStart').hidden = true;
+      setTimeout(function(){ $('arena').classList.remove('on'); }, 4000); }
+    else if (n === 12 && ARENA) arenaState('кто-то отвалился');
+  }
+
+  /* ——— Движок ——— */
+  var ready = false, args = null;
+  function launch(){
+    if (!ready || !args) return;
+    $('loader').style.display = 'none';
+    (Module.callMain || window.callMain)(args);
+  }
+  function start(o){
+    store('doom.device', DEV);
+    document.body.classList.toggle('touch', DEV === 'phone');
+    document.body.classList.toggle('pc', DEV === 'pc');
+    $('menu').classList.remove('on');
+    args = ['-iwad', 'doom1.wad', '-config', DEV + '.cfg', '-extraconfig', DEV + '_extra.cfg',
+            '-window', '-nogui', '-nomusic'];
+    if (o.kind === 'host') {
+      args.push('-privateserver', '-altdeath', '-nomonsters', '-nodes', String(o.players),
+                '-warp', '1', String(o.map), '-wss', wsUrl(o.code));
+    } else if (o.kind === 'join') {
+      /* Номер гравця рушій бере з rand(), засіяного часом у секундах: двоє,
+         що зайшли в ту саму секунду, отримали б однаковий номер і
+         заважали б одне одному. Зсуваємо годинник цієї сторінки на
+         випадкову величину — номер стає випадковим насправді. */
+      var off = Math.floor(Math.random() * 3e9), now = Date.now;
+      Date.now = function(){ return now() + off; };
+      args.push('-connect', '1', '-wss', wsUrl(o.code));
+    }
+    if (o.kind !== 'solo') {
+      ARENA = o;
+      $('arenaCode').textContent = o.code;
+      arenaState(o.kind === 'host' ? 'ждём игроков: ' + o.players : 'ждём начала');
+      $('arenaStart').hidden = o.kind !== 'host';
+      $('arena').classList.add('on');
+    }
+    if (!ready) { $('loader').style.display = 'flex'; }
+    launch();
+  }
+
+  window.Module = {
+    canvas: document.getElementById('canvas'),
+    noInitialRun: true,
+    print: engineSays,
+    printErr: function(t){ engineSays(t); console.warn(t); },
+    setStatus: function(){},
+    preRun: [function(){
+      var FS = Module.FS;
+      FS.createPreloadedFile('', 'doom1.wad', 'doom1.wad', true, false);
+      ['phone.cfg', 'phone_extra.cfg', 'pc.cfg', 'pc_extra.cfg'].forEach(function(f){
+        FS.createPreloadedFile('', f, f, true, true);
+      });
+      loadSaves(FS);
+    }],
+    onRuntimeInitialized: function(){
+      ready = true;
+      setInterval(function(){ keepSaves(Module.FS); }, 4000);
+      document.addEventListener('visibilitychange', function(){ if (document.hidden) keepSaves(Module.FS); });
+      launch();
+    }
+  };
+  window.addEventListener('error', function(e){
+    if (e && e.message && !/Script error/.test(e.message)) fail('Ошибка: ' + e.message);
+  });
+  var s = document.createElement('script');
+  s.src = 'websockets-doom.js';
+  s.onerror = function(){ fail('Не загрузился движок. Проверь интернет и открой ещё раз.'); };
+  document.body.appendChild(s);
+})();
+</script>
+</body>
+</html>
