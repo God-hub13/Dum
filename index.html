@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="description" content="Тот самый DOOM 1993: 9 уровней в одиночку или арена онлайн до 4 игроков — стреляйтесь с друзьями">
+<meta name="description" content="Тот самый шутер 1993 года: демоны, дробовик, 9 уровней. В одиночку или арена онлайн до 4 игроков">
 <meta name="theme-color" content="#000000">
 <!-- Для галереи Pleasure Union: одиночная игра + арена онлайн на 2–4. -->
 <meta name="pu:online" content="1">
 <meta name="pu:players" content="1-4">
-<title>DOOM</title>
+<title>BOOM</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
 :root{--safe-l:env(safe-area-inset-left,0px);--safe-r:env(safe-area-inset-right,0px);--safe-b:env(safe-area-inset-bottom,0px);--safe-t:env(safe-area-inset-top,0px)}
@@ -23,7 +23,11 @@ canvas#canvas{display:block;background:#000;width:min(100vw,calc(100dvh * 4 / 3)
 @media (orientation:portrait){#screen{align-items:flex-start;padding-top:calc(var(--tg-content-top,0px) + var(--safe-t) + 8px)}}
 
 #loader{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#000;z-index:5}
-#loader b{font:900 44px/1 Impact,"Arial Black",sans-serif;letter-spacing:2px;color:#c21a1a;text-shadow:0 0 18px #f00a}
+@font-face{font-family:BoomLogo;src:url(boom-logo.woff2) format("woff2");font-display:swap}
+.logo{font-family:BoomLogo,Impact,"Arial Black",sans-serif;font-weight:400;letter-spacing:4px;transform:scaleX(1.2);
+  background:linear-gradient(#fff396,#ffaa1e 35%,#dc3c0a 70%,#780a00);-webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 4px 0 #3c0c00) drop-shadow(0 0 16px #ff2a0088)}
+#loader b{font-size:52px;line-height:1}
 #loader span{color:#aaa;font-size:13px}
 #loader i{width:180px;height:6px;border-radius:3px;background:#222;overflow:hidden}
 #loader i::after{content:"";display:block;height:100%;width:40%;background:#c21a1a;animation:ld 1s linear infinite}
@@ -35,18 +39,18 @@ canvas#canvas{display:block;background:#000;width:min(100vw,calc(100dvh * 4 / 3)
   align-items:center;justify-content:center;padding:16px;overflow:auto;touch-action:pan-y}
 #menu.on{display:flex}
 #menu .box{width:min(440px,100%);display:flex;flex-direction:column;gap:12px;text-align:center}
-#menu h1{margin:0 0 4px;font:900 52px/1 Impact,"Arial Black",sans-serif;letter-spacing:3px;color:#d11;text-shadow:0 0 22px #f00a}
+#menu h1{margin:0 0 4px;font-size:72px;line-height:1.05}
 #menu .sub{color:#b99;font-size:13px;margin:-4px 0 6px}
 #menu .lbl{color:#a88;font-size:12px;text-transform:uppercase;letter-spacing:1px;margin-top:6px}
 .seg{display:flex;gap:8px}
 .seg button{flex:1}
-.mbtn{border:2px solid #7a1c1c;background:#1b0707;color:#f3dcdc;border-radius:12px;padding:13px 10px;font:800 15px/1.2 inherit;cursor:pointer}
+.mbtn{border:2px solid #7a1c1c;background:#1b0707;color:#f3dcdc;border-radius:12px;padding:13px 10px;font-family:inherit;font-weight:800;font-size:15px;line-height:1.2;cursor:pointer}
 .mbtn.on,.mbtn.main{background:#b01414;border-color:#ff5050;color:#fff}
 .mbtn.ghost{background:transparent;border-color:#442}
 .mbtn:disabled{opacity:.45}
 .row{display:flex;gap:8px;align-items:stretch}
 .row > *{flex:1}
-#menu input,#menu select{border:2px solid #7a1c1c;background:#000;color:#fff;border-radius:12px;padding:12px;font:800 18px/1 inherit;text-align:center;min-width:0}
+#menu input,#menu select{border:2px solid #7a1c1c;background:#000;color:#fff;border-radius:12px;padding:12px;font-family:inherit;font-weight:800;font-size:18px;text-align:center;min-width:0}
 #menu input{letter-spacing:6px}
 #menu .hint{color:#977;font-size:12px;line-height:1.4}
 .page{display:none;flex-direction:column;gap:12px}
@@ -57,7 +61,7 @@ canvas#canvas{display:block;background:#000;width:min(100vw,calc(100dvh * 4 / 3)
   display:none;gap:8px;align-items:center;background:#000c;border:1px solid #7a1c1c;border-radius:12px;padding:6px 8px 6px 12px;white-space:nowrap}
 #arena.on{display:flex}
 #arena b{letter-spacing:2px;color:#ff6b6b}
-#arena button{border:0;border-radius:9px;padding:8px 10px;font:800 13px/1 inherit;background:#b01414;color:#fff}
+#arena button{border:0;border-radius:9px;padding:8px 10px;font-family:inherit;font-weight:800;font-size:13px;background:#b01414;color:#fff}
 #arena button.ghost{background:#333}
 
 /* ——— Сенсорное управление: только когда выбран телефон ——— */
@@ -90,12 +94,12 @@ body.pc #pcHint{display:block}
 </head>
 <body>
 <div id="screen"><canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas></div>
-<div id="loader"><b>DOOM</b><i></i><span id="ldText">Загрузка… (6 МБ)</span></div>
+<div id="loader"><b class="logo">BOOM</b><i></i><span id="ldText">Загрузка… (6 МБ)</span></div>
 <div id="err"></div>
 
 <div id="menu"><div class="box">
-  <h1>DOOM</h1>
-  <div class="sub">1993 · первый эпизод</div>
+  <h1 class="logo">BOOM</h1>
+  <div class="sub">тот самый шутер 1993 года · 9 уровней · арена</div>
   <div class="lbl">Играю с</div>
   <div class="seg">
     <button class="mbtn" data-dev="phone">📱 Телефона</button>
@@ -106,7 +110,7 @@ body.pc #pcHint{display:block}
     <div class="lbl">Режим</div>
     <button class="mbtn main" id="goSolo">▶ Одиночная</button>
     <button class="mbtn" id="goArena">⚔ Арена онлайн</button>
-    <div class="hint" id="noArena" hidden>Арена работает, когда DOOM открыт из Pleasure Union.</div>
+    <div class="hint" id="noArena" hidden>Арена работает, когда игра открыта из Pleasure Union.</div>
   </div>
 
   <div class="page" id="pgArena">
@@ -127,7 +131,7 @@ body.pc #pcHint{display:block}
 
   <div class="page" id="pgInvited">
     <div class="lbl">Тебя зовут на арену</div>
-    <div style="font:900 40px/1 inherit;letter-spacing:8px;color:#ff6b6b" id="invCode"></div>
+    <div style="font-weight:900;font-size:40px;letter-spacing:8px;color:#ff6b6b" id="invCode"></div>
     <button class="mbtn main" id="goInvited">⚔ Войти</button>
     <button class="mbtn ghost" id="skipInvite">Не сейчас</button>
   </div>
@@ -150,7 +154,7 @@ body.pc #pcHint{display:block}
 </div>
 
 <script>
-/* DOOM (1993) в браузере. Движок — готовая сборка cloudflare/doom-wasm
+/* BOOM — DOOM (1993) в браузере. Движок — готовая сборка cloudflare/doom-wasm
    (Chocolate Doom, GPL-2), уровни — shareware DOOM1.WAD от id Software.
    Этот файл — только оболочка: экран, сенсорное управление, звук на
    телефоне, сохранения и Telegram. */
@@ -277,7 +281,7 @@ body.pc #pcHint{display:block}
         // уровня стоило бы прогресса). Иначе «назад» — это меню игры.
         if (!PU_GALLERY) { tap('Escape'); return; }
         var go = function(ok){ if (ok) window.PU.exit(); };
-        if (tg.showConfirm) tg.showConfirm('Выйти из DOOM в галерею?', go); else go(confirm('Выйти из DOOM в галерею?'));
+        if (tg.showConfirm) tg.showConfirm('Выйти из BOOM в галерею?', go); else go(confirm('Выйти из BOOM в галерею?'));
       });
     }
   }
@@ -327,7 +331,7 @@ body.pc #pcHint{display:block}
   function arenaState(t){ $('arenaState').textContent = t; }
   $('arenaInvite').onclick = function(){
     var link = window.PU && window.PU.roomLink ? window.PU.roomLink(ARENA.code) : '';
-    var text = '⚔ DOOM-арена, код ' + ARENA.code + '. Залетай — постреляемся!';
+    var text = '⚔ BOOM-арена, код ' + ARENA.code + '. Залетай — постреляемся!';
     if (link && tg && tg.openTelegramLink) {
       tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(link) + '&text=' + encodeURIComponent(text));
     } else if (navigator.clipboard) {
@@ -353,6 +357,8 @@ body.pc #pcHint{display:block}
   function launch(){
     if (!ready || !args) return;
     $('loader').style.display = 'none';
+    // Движок пишет в заголовок «DOOM Shareware - Websockets Doom» — у нас BOOM.
+    try { Object.defineProperty(document, 'title', {configurable: true, get: function(){ return 'BOOM'; }, set: function(){}}); } catch (e) {}
     (Module.callMain || window.callMain)(args);
   }
   function start(o){
