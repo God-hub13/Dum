@@ -60,6 +60,9 @@ canvas#canvas{display:block;background:#000;width:min(100vw,calc(100dvh * 4 / 3)
 #arena{position:fixed;z-index:4;left:50%;transform:translateX(-50%);top:calc(var(--tg-content-top,0px) + var(--safe-t) + 8px);
   display:none;gap:8px;align-items:center;background:#000c;border:1px solid #7a1c1c;border-radius:12px;padding:6px 8px 6px 12px;white-space:nowrap}
 #arena.on{display:flex}
+#arena{flex-direction:column;align-items:stretch}
+#arena .arow{display:flex;gap:8px;align-items:center}
+#arena .awarn{font-size:11px;color:#ffb3a6;margin:6px 2px 0;white-space:normal;max-width:360px}
 #arena b{letter-spacing:2px;color:#ff6b6b}
 #arena button{border:0;border-radius:9px;padding:8px 10px;font-family:inherit;font-weight:800;font-size:13px;background:#b01414;color:#fff}
 #arena button.ghost{background:#333}
@@ -173,8 +176,9 @@ body.touch #phoneHint.on{display:block}
   </div>
 </div></div>
 
-<div id="arena"><span>Арена <b id="arenaCode"></b></span><span id="arenaState"></span>
-  <button id="arenaInvite">Позвать</button><button class="ghost" id="arenaStart" hidden>Начать</button></div>
+<div id="arena"><div class="arow"><span>Арена <b id="arenaCode"></b></span><span id="arenaState"></span>
+  <button id="arenaInvite">Позвать</button><button class="ghost" id="arenaCopy">Ссылка</button><button class="ghost" id="arenaStart" hidden>Начать</button></div>
+  <div class="awarn" id="arenaWarn" hidden>Не сворачивай игру, пока все не зайдут — арена живёт у тебя.</div></div>
 <div id="phoneHint">👈 Левая половина — ходить: стик появится под пальцем<br>👉 Правая половина — водить пальцем, поворот</div>
 <div id="pcHint">Клик по игре — управление мышью · WASD — ходить · E — открыть · Esc — меню</div>
 
@@ -432,25 +436,38 @@ body.touch #phoneHint.on{display:block}
   /* ——— Полоса арены ——— */
   var ARENA = null;
   function arenaState(t){ $('arenaState').textContent = t; }
+  /* «Позвать» — картка «Переслати» ПОВЕРХ гри (PU.shareRoom). Раньше открывался
+     выбор чата в самом телеграме: игра хозяина сворачивалась, а движок рвёт
+     связь после 4 секунд тишины — арена разваливалась, пока хозяин выбирал
+     чат. «Ссылка» — просто копирует, тоже не выходя из игры. */
+  function roomLink(){ return window.PU && window.PU.roomLink ? window.PU.roomLink(ARENA.code) : ''; }
   $('arenaInvite').onclick = function(){
-    var link = window.PU && window.PU.roomLink ? window.PU.roomLink(ARENA.code) : '';
-    var text = '⚔ BOOM-арена, код ' + ARENA.code + '. Залетай — постреляемся!';
-    if (link && tg && tg.openTelegramLink) {
-      tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(link) + '&text=' + encodeURIComponent(text));
-    } else if (navigator.clipboard) {
-      navigator.clipboard.writeText(ARENA.code).then(function(){ arenaState('код скопирован'); }, function(){});
-    }
+    if (!(window.PU && window.PU.shareRoom)) { $('arenaCopy').onclick(); return; }
+    window.PU.shareRoom(ARENA.code).then(function(how){
+      if (how === 'copied') arenaState('ссылка скопирована — кидай другу');
+      else if (how === 'link') arenaState('код ' + ARENA.code + ' — скажи другу');
+    });
+  };
+  $('arenaCopy').onclick = function(){
+    var link = roomLink() || ARENA.code;
+    var done = function(){ arenaState(link === ARENA.code ? 'код скопирован' : 'ссылка скопирована — кидай другу'); };
+    try { navigator.clipboard.writeText(link).then(done, function(){ arenaState('код ' + ARENA.code); }); }
+    catch (e) { arenaState('код ' + ARENA.code); }
   };
   $('arenaStart').onclick = function(){ tap('Space'); };  // хозяин: начать, не дожидаясь всех (в окне ожидания — пробел)
 
   /* Движок пишет о сети строками «doom: N, …» (см. cloudflare/doom-wasm). */
   function engineSays(t){
     var m = /^doom: (\d+),/.exec(t || '');
-    if (!m) { if (/^I_Error|Error:/.test(t)) fail(t); return; }
+    if (!m) {
+      if (/Lost connection to server/i.test(t)) fail('Связь с ареной потеряна. Если хозяин сворачивал игру — арена развалилась: создайте новую.');
+      else if (/^I_Error|Error:/.test(t)) fail(t);
+      return;
+    }
     var n = +m[1];
     if (n === 1 || n === 7) fail('Не удалось подключиться к арене. Проверь код — и что хозяин арены ещё в игре.');
-    else if (n === 9) fail('Связь с ареной потеряна.');
-    else if (n === 10 && ARENA) { arenaState('бой идёт'); $('arenaStart').hidden = true;
+    else if (n === 9) fail('Связь с ареной потеряна. Если хозяин сворачивал игру — арена развалилась: создайте новую.');
+    else if (n === 10 && ARENA) { arenaState('бой идёт'); $('arenaStart').hidden = true; $('arenaWarn').hidden = true;
       setTimeout(function(){ $('arena').classList.remove('on'); }, 4000); }
     else if (n === 12 && ARENA) arenaState('кто-то отвалился');
   }
@@ -520,6 +537,7 @@ body.touch #phoneHint.on{display:block}
       $('arenaCode').textContent = o.code;
       arenaState(o.kind === 'host' ? 'ждём игроков: ' + o.players : 'ждём начала');
       $('arenaStart').hidden = o.kind !== 'host';
+      $('arenaWarn').hidden = o.kind !== 'host';
       $('arena').classList.add('on');
     }
     if (!ready) { $('loader').style.display = 'flex'; }
