@@ -70,6 +70,9 @@ body.touch #pad{display:block}
 #pcHint{position:fixed;z-index:3;left:50%;bottom:10px;transform:translateX(-50%);color:#fff9;font-size:12px;display:none;
   background:#0009;padding:6px 10px;border-radius:8px}
 body.pc #pcHint{display:block}
+#phoneHint{position:fixed;z-index:3;left:50%;top:45%;transform:translate(-50%,-50%);color:#fff;font-size:14px;display:none;
+  background:#000b;padding:10px 14px;border-radius:12px;text-align:center;pointer-events:none;transition:opacity .6s}
+body.touch #phoneHint.on{display:block}
 .ctl{position:fixed;z-index:3;border-radius:50%;border:2px solid #fff3;background:#ffffff14;color:#fffc;
   display:flex;align-items:center;justify-content:center;font-weight:800;letter-spacing:.5px;touch-action:none}
 .ctl.on{background:#ffffff40;border-color:#fff8}
@@ -139,6 +142,7 @@ body.pc #pcHint{display:block}
 
 <div id="arena"><span>Арена <b id="arenaCode"></b></span><span id="arenaState"></span>
   <button id="arenaInvite">Позвать</button><button class="ghost" id="arenaStart" hidden>Начать</button></div>
+<div id="phoneHint">👆 Води пальцем по экрану — поворот<br>Стик — ходить и шагать вбок</div>
 <div id="pcHint">Клик по игре — управление мышью · WASD — ходить · E — открыть · Esc — меню</div>
 
 <div id="pad">
@@ -170,7 +174,7 @@ body.pc #pcHint{display:block}
   var KEYS = {
     ArrowUp:[38,'ArrowUp'], ArrowDown:[40,'ArrowDown'], ArrowLeft:[37,'ArrowLeft'], ArrowRight:[39,'ArrowRight'],
     ControlLeft:[17,'Control'], Space:[32,' '], Escape:[27,'Escape'], Tab:[9,'Tab'], Enter:[13,'Enter'],
-    KeyY:[89,'y'], BracketRight:[221,']']
+    KeyY:[89,'y'], BracketRight:[221,']'], Comma:[188,','], Period:[190,'.']
   };
   var down = {};
   function key(code, isDown){
@@ -199,17 +203,53 @@ body.pc #pcHint{display:block}
     var dx = (e.clientX - r.left - R) / R, dy = (e.clientY - r.top - R) / R;
     var m = Math.hypot(dx, dy); if (m > 1) { dx /= m; dy /= m; }
     knob.style.transform = 'translate(' + dx * R * 0.6 + 'px,' + dy * R * 0.6 + 'px)';
-    // Мёртвая зона — чтобы палец, лежащий на стике, не крутил камеру сам.
+    // Стик — ходьба: вверх/вниз — вперёд/назад, вбок — шаг вбок.
+    // Поворачивает камеру палец по экрану (см. «Взгляд» ниже).
+    // Мёртвая зона — чтобы палец, лежащий на стике, не водил героя сам.
     key('ArrowUp', dy < -0.35); key('ArrowDown', dy > 0.35);
-    key('ArrowLeft', dx < -0.35); key('ArrowRight', dx > 0.35);
+    key('Comma', dx < -0.35); key('Period', dx > 0.35);
   }
   function stickEnd(){
     sid = null; knob.style.transform = ''; stick.classList.remove('on');
-    ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].forEach(function(c){ key(c, false); });
+    ['ArrowUp','ArrowDown','Comma','Period'].forEach(function(c){ key(c, false); });
   }
   stick.addEventListener('pointerdown', function(e){ e.preventDefault(); sid = e.pointerId; stick.setPointerCapture(sid); stick.classList.add('on'); stickMove(e); });
   stick.addEventListener('pointermove', function(e){ if (e.pointerId === sid) stickMove(e); });
   ['pointerup','pointercancel','lostpointercapture'].forEach(function(t){ stick.addEventListener(t, stickEnd); });
+
+  /* ——— Взгляд: палец по экрану крутит камеру, как в мобильных шутерах ———
+     Движок умеет поворачивать мышью — плавно и на любой угол. Отдаём ему
+     движение пальца как движение мыши. Мышь движок слушает, только когда
+     она «захвачена» (pointer lock); на телефоне захватывать нечего, поэтому
+     в режиме телефона говорим ему, что захвачено, и не даём браузеру
+     пытаться захватить по-настоящему. */
+  var canvasEl = document.getElementById('canvas'), LOOK_SPEED = 5;
+  function fakeLock(){
+    try {
+      Object.defineProperty(document, 'pointerLockElement', {configurable: true, get: function(){ return canvasEl; }});
+      canvasEl.requestPointerLock = function(){};
+      document.exitPointerLock = function(){};
+    } catch (e) {}
+  }
+  var look = null, screenEl = document.getElementById('screen');
+  screenEl.addEventListener('pointerdown', function(e){
+    if (DEV !== 'phone' || look) return;
+    e.preventDefault();
+    // Движок узнаёт о «захвате» только из события — шлём его сами.
+    document.dispatchEvent(new Event('pointerlockchange'));
+    look = {id: e.pointerId, x: e.clientX, rest: 0};
+    try { screenEl.setPointerCapture(e.pointerId); } catch (er) {}
+  });
+  screenEl.addEventListener('pointermove', function(e){
+    if (!look || e.pointerId !== look.id) return;
+    var dx = (e.clientX - look.x) * LOOK_SPEED + look.rest;
+    look.x = e.clientX;
+    var step = Math.trunc(dx); look.rest = dx - step;
+    if (step) canvasEl.dispatchEvent(new MouseEvent('mousemove', {movementX: step, movementY: 0, bubbles: true, cancelable: true}));
+  });
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function(t){
+    screenEl.addEventListener(t, function(e){ if (look && e.pointerId === look.id) look = null; });
+  });
 
   hold(document.getElementById('fire'), 'ControlLeft');
   hold(document.getElementById('use'), 'Space');
@@ -364,6 +404,12 @@ body.pc #pcHint{display:block}
   function start(o){
     store('doom.device', DEV);
     document.body.classList.toggle('touch', DEV === 'phone');
+    if (DEV === 'phone') {
+      fakeLock();
+      var h = $('phoneHint'); h.classList.add('on');
+      setTimeout(function(){ h.style.opacity = '0'; }, 5000);
+      setTimeout(function(){ h.classList.remove('on'); }, 5700);
+    }
     document.body.classList.toggle('pc', DEV === 'pc');
     $('menu').classList.remove('on');
     args = ['-iwad', 'doom1.wad', '-config', DEV + '.cfg', '-extraconfig', DEV + '_extra.cfg',
